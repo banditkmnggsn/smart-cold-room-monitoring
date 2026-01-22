@@ -1,0 +1,233 @@
+================================================================================
+                    LABELING GUIDE - COLD ROOM MONITORING
+================================================================================
+
+CLASSIFICATION TASK:
+3-class multi-class classification for IoT cold room monitoring
+
+TARGET VARIABLE: Label (0, 1, or 2)
+
+================================================================================
+                            CLASS DEFINITIONS
+================================================================================
+
+CLASS 0: NORMAL OPERATION
+──────────────────────────────────────────────────────────────────────────────
+Description:
+  Cold room is operating correctly. Temperature is stable, both sensors agree,
+  no anomalies detected.
+
+Characteristics:
+  ✓ Temperature stable: 6°C - 8°C (typical cold room range)
+  ✓ Both sensors consistent: diffT < 0.5°C
+  ✓ Low rate of change: dT < 0.1°C per reading
+  ✓ Low noise: stdT_5 < 0.3
+  ✓ No sensor issues: stuck_count ≈ 0, readings are realistic
+
+Sensor Readings Example:
+  timestamp    T1(°C)  T2(°C)  H1(%)  H2(%)  dT1     dT2      diffT   Status
+  ─────────────────────────────────────────────────────────────────────────
+  10000        7.10    7.20    75.0   79.0   0.00    0.01     0.10    ✓ NORMAL
+  10005        7.10    7.22    75.0   79.2  -0.00    0.02     0.12    ✓ NORMAL
+  10010        7.09    7.21    75.1   79.1   0.01   -0.01     0.12    ✓ NORMAL
+  10015        7.10    7.20    75.0   79.0   0.01   -0.01     0.10    ✓ NORMAL
+
+Real Action:
+  → No action required
+  → Continue normal monitoring
+
+
+CLASS 1: ABNORMAL – COOLING FAILURE
+──────────────────────────────────────────────────────────────────────────────
+Description:
+  Temperature is rising, indicating cooling system failure. This is a HIGH
+  PRIORITY alert that requires immediate action. Cold room door may be open,
+  or cooling unit has failed.
+
+Characteristics:
+  ✓ Temperature rising: T > 9-10°C (depends on setpoint)
+  ✓ Positive rate of change: dT > +0.2°C per reading
+  ✓ Both sensors show same trend: diffT < 0.5°C (sensors still agree)
+  ✓ Trend is consistent: not random spikes
+  ✓ Temperature may reach 11-15°C in severe cases
+
+Sensor Readings Example (Rising Trend):
+  timestamp    T1(°C)  T2(°C)  H1(%)  H2(%)  dT1     dT2      diffT   Status
+  ─────────────────────────────────────────────────────────────────────────
+  10000        8.00    8.10    75.0   79.0   0.00    0.00     0.10    ✓ START
+  10005        8.30    8.40    78.0   81.0   0.30    0.30     0.10    ⚠ RISING
+  10010        8.60    8.70    81.0   83.0   0.30    0.30     0.10    ⚠ RISING
+  10015        8.90    9.00    84.0   85.0   0.30    0.30     0.10    🔴 ALARM
+  10020        9.20    9.30    87.0   87.0   0.30    0.30     0.10    🔴 ALARM
+
+Pattern Recognition:
+  → Both T1 and T2 rising together (not sensor fault)
+  → Rising rate consistent (not random spike)
+  → diffT remains small (both sensors agree)
+
+Real Action:
+  → IMMEDIATE ALERT to operator
+  → Check cooling unit status
+  → Check if cold room door is open
+  → Check if compressor is running
+
+
+CLASS 2: ABNORMAL – SENSOR FAULT
+──────────────────────────────────────────────────────────────────────────────
+Description:
+  Sensor malfunction or hardware failure. Sensor readings are unrealistic or
+  inconsistent. Data cannot be trusted. Requires maintenance/replacement.
+
+Sub-cases of Sensor Fault:
+
+  2A: UNREALISTIC TEMPERATURE
+      → T < -15°C (freezing point impossible for food storage)
+      → T > +50°C (physically impossible, sensor damage likely)
+      → Example: T1 = -999°C (sensor unplugged), T1 = 65°C (shorted pin)
+      
+  2B: LARGE OFFSET (diffT > 3.5°C)
+      → T1 and T2 differ by >3.5°C
+      → One sensor reading realistic, the other not
+      → Example: T1 = 12°C, T2 = 7°C (diff = 5°C → sensor T1 fault)
+      
+  2C: SENSOR STUCK (repeated values >1000 times)
+      → Same reading for 1000+ consecutive measurements
+      → Indicates sensor frozen/stuck in hardware error
+      → Example: T1 = 7.1°C for 1000 reads (5000 seconds ≈ 1.4 hours)
+      → Even if actual temp is 7.1°C, 1000+ repeats = malfunction
+
+Characteristics (ANY of these = Class 2):
+  ✓ Unrealistic value: T < -15°C OR T > +50°C
+  ✓ Large offset: diffT > 3.5°C
+  ✓ Stuck sensor: stuck_count > 500 (very high repetition)
+  ✓ High noise: stdT_5 > 1.5 (very unstable readings)
+  ✓ Impossible combinations: H = -999, T = -999 (sensor disconnected)
+
+Sensor Readings Example (Fault Cases):
+
+  Case 2A - Unrealistic Temp:
+  timestamp    T1(°C)  T2(°C)  H1(%)  H2(%)  dT1     dT2      diffT   Status
+  ─────────────────────────────────────────────────────────────────────────
+  10000        55.32   7.80    75.0   79.0   5.20    0.10     47.52   🔴 FAULT
+  (T1 = 55°C is impossible → sensor malfunction)
+
+  Case 2B - Large Offset:
+  timestamp    T1(°C)  T2(°C)  H1(%)  H2(%)  dT1     dT2      diffT   Status
+  ─────────────────────────────────────────────────────────────────────────
+  10000        12.50   7.80    75.0   79.0   0.50    0.10     4.70    🔴 FAULT
+  (T2 normal, T1 too high, diff = 4.7°C > 3.5 threshold → sensor fault)
+
+  Case 2C - Stuck Sensor:
+  timestamp    T1(°C)  T2(°C)  H1(%)  H2(%)  dT1     dT2      diffT   Status
+  ─────────────────────────────────────────────────────────────────────────
+  10000        7.10    7.90    75.0   79.0   0.00    0.10     0.80    ✓ START
+  10005        7.10    8.00    75.0   79.0   0.00    0.10     0.90    ⚠ SAME_T1
+  10010        7.10    8.10    75.0   79.0   0.00    0.10     1.00    ⚠ SAME_T1
+  ...
+  12000        7.10    8.90    75.0   79.0   0.00    0.10     1.80    🔴 STUCK
+  (T1 hasn't changed in 400+ reads → hardware stuck)
+
+Real Action:
+  → IMMEDIATE ALERT: "Sensor Fault Detected"
+  → Send technician to replace DHT11 sensor
+  → Do NOT trust T1/T2 readings until replaced
+  → Switch to manual temperature check if critical
+
+
+================================================================================
+                          DECISION FLOWCHART
+================================================================================
+
+Input: T1, T2, H1, H2 (from 2 DHT sensors)
+
+Step 1: Check for Unrealistic Values
+  IF (T1 < -15) OR (T1 > 50) OR (T2 < -15) OR (T2 > 50)
+    → CLASS 2 (SENSOR FAULT) ✓
+    
+Step 2: Check for Sensor Offset
+  ELSE IF (|T1 - T2| > 3.5°C)
+    → CLASS 2 (SENSOR FAULT) ✓
+    
+Step 3: Check for Stuck Sensor
+  ELSE IF (stuck_count1 > 500 OR stuck_count2 > 500)
+    → CLASS 2 (SENSOR FAULT) ✓
+    
+Step 4: Check for Cooling Failure
+  ELSE IF (dT1 > +0.2°C) OR (dT2 > +0.2°C) AND (T1 > 9°C OR T2 > 9°C)
+    → CLASS 1 (COOLING FAILURE) ⚠️
+    
+Step 5: Default - Normal Operation
+  ELSE
+    → CLASS 0 (NORMAL) ✓
+
+
+================================================================================
+                         IMPORTANT NOTES
+================================================================================
+
+1. PRIORITY DETECTION:
+   Sensor Fault (Class 2) check FIRST
+   → If sensors are broken, all other readings are meaningless
+   
+2. COOLING FAILURE (Class 1) check SECOND
+   → Rising temperature with valid sensors = critical alert
+   
+3. NORMAL (Class 0) by elimination
+   → Default if no fault and no cooling failure detected
+
+4. THRESHOLD VALUES (CRITICAL FOR DEPLOYMENT):
+   - diffT > 3.5°C  → Sensor fault (tuning: may adjust to 3.0-4.0)
+   - dT > +0.2°C    → Cooling failure indicator
+   - T > 9-10°C     → Cooling failure threshold
+   - stuck_count > 500 → Sensor stuck fault
+   - T < -15°C or T > 50°C → Impossible, sensor error
+
+5. FALSE POSITIVE AVOIDANCE:
+   → Require BOTH high dT AND high T for Class 1
+   → Require LARGE diffT (>3.5) or VERY stuck for Class 2
+   → Multiple consecutive readings should confirm before alerting
+
+6. EDGE CASES:
+   → Door open: T rises gradually → Class 1 (correct, needs alert)
+   → Compressor fail: T rises steadily → Class 1 (correct)
+   → Sensor shorted: T = -999 or 999 → Class 2 (correct)
+   → Sensor unstable: diffT jumps → Class 2 (correct)
+
+
+================================================================================
+                    DATASET STATISTICS (700 samples)
+================================================================================
+
+Class 0 (Normal operation):        269 samples (38.4%)
+  - Mean T1: 7.51°C (±0.63)
+  - Mean T2: 7.53°C (±0.61)
+  - Mean diffT: 0.36°C (±0.38)
+  - Pattern: Stable, sensors agree
+
+Class 1 (Cooling Failure):         221 samples (31.6%)
+  - Mean T1: 12.67°C (±4.56)
+  - Mean T2: 12.68°C (±4.55)
+  - Mean diffT: 0.15°C (±0.11)
+  - Pattern: Both rising together, sensors still agree
+
+Class 2 (Sensor Fault):            210 samples (30.0%)
+  - Mean T1: 8.90°C (±21.56)       [High variance = fault]
+  - Mean T2: 7.69°C (±0.95)
+  - Mean diffT: 14.16°C (±16.49)   [Huge offset!]
+  - stuck_count1: 333.3 (avg)      [Very stuck]
+  - Pattern: Inconsistent, unrealistic, sensors disagree
+
+
+================================================================================
+                         TRAINING READY ✓
+================================================================================
+
+This dataset is prepared for Edge Impulse training.
+Expected model performance:
+- Accuracy: >95% (classes well-separated)
+- Precision (Class 1 & 2): >98% (few false alarms)
+- Recall: >90% (catches most faults)
+
+Next: Upload to Edge Impulse and train MLP neural network!
+
+================================================================================
