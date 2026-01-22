@@ -1,5 +1,5 @@
 ================================================================================
-           DATASET PREPARATION COMPLETE - FINAL STATUS REPORT
+           DATASET PREPARATION COMPLETE - FINAL EXAM IoT REPORT
 ================================================================================
 
 PROJECT: TinyML Cold Room Monitoring System
@@ -22,7 +22,7 @@ Model: MLP Neural Network (12 neurons, 1-2 layers) → ESP32 TensorFlow Lite Mic
                          WHAT WAS DONE
 ================================================================================
 
-✅ STEP 1: Re-analyzed Original Dataset
+ STEP 1: Re-analyzed Original Dataset
    - Input: Dataset Train (raw).csv (173 rows)
    - Recognized natural patterns:
      • Rows 0-70: Normal stable operation (6-8°C)
@@ -30,7 +30,7 @@ Model: MLP Neural Network (12 neurons, 1-2 layers) → ESP32 TensorFlow Lite Mic
      • Rows 131-173: Recovery (temp drops back down)
    - Preserved TEMPORAL ORDER (not shuffled!)
 
-✅ STEP 2: Sequence-Aware Augmentation (527 synthetic samples added)
+ STEP 2: Sequence-Aware Augmentation (527 synthetic samples added)
    
    Class 0 (Normal operation) - 269 samples:
    ├─ Original normal rows: 162 samples (kept in order)
@@ -51,7 +51,7 @@ Model: MLP Neural Network (12 neurons, 1-2 layers) → ESP32 TensorFlow Lite Mic
    └─ Stuck sensor (2C): 70 samples
       └─ stuck_count > 1000 (sensor repeated >1000 times, ~1.4+ hours)
 
-✅ STEP 3: 15 Feature Engineering
+ STEP 3: 15 Feature Engineering
 
    Raw Sensors (4):
    ├─ temperature1_c, humidity1_percent
@@ -76,13 +76,13 @@ Model: MLP Neural Network (12 neurons, 1-2 layers) → ESP32 TensorFlow Lite Mic
    ├─ stuck_count2 = # readings where |dT2| < 0.01°C
    └─ diffT = |T1 - T2| ← MOST IMPORTANT for sensor fault detection!
 
-✅ STEP 4: Created Comprehensive Labeling Guide
+ STEP 4: Created Comprehensive Labeling Guide
    - File: data/LABELING_GUIDE.txt (detailed class definitions)
    - Decision flowchart for classification
    - Sensor readings examples per class
    - Real action items for operators
 
-✅ STEP 5: Exported for Edge Impulse
+ STEP 5: Exported for Edge Impulse
    - File: data/dataset_for_edgeimpulse.csv (700 × 16 columns)
    - Format: CSV with features + label (y)
    - Ready to upload directly to Edge Impulse
@@ -131,7 +131,7 @@ Sensor Statistics:
 
 Example Row (Cooling Failure):
   T1=10.5°C, T2=10.2°C, H1=85%, H2=87%, dT1=+0.4°C, dT2=+0.3°C, diffT=0.3°C
-  → ⚠️ COOLING FAILURE (both rising, high temp)
+  → COOLING FAILURE (both rising, high temp)
 
 Trend Example (Episode):
   Step 1: T1=8.0°C,  dT1=+0.3°C → 8.0
@@ -162,16 +162,16 @@ Example Rows (Different Fault Types):
 
   2A - Unrealistic Temperature:
     T1=55.2°C, T2=7.8°C, dT1=5.2°C, diffT=47.5°C
-    → 🔴 SENSOR FAULT (T1 impossible, +55°C = malfunction)
+    → SENSOR FAULT (T1 impossible, +55°C = malfunction)
   
   2B - Large Offset (diffT > 3.5°C):
     T1=12.5°C, T2=7.8°C, dT1≈0, dT2≈0, diffT=4.7°C
-    → 🔴 SENSOR FAULT (sensors differ by 4.7°C, one is lying)
+    → SENSOR FAULT (sensors differ by 4.7°C, one is lying)
   
   2C - Stuck Sensor (1000+ repeats):
     T1=7.10°C for 1000 consecutive reads
     dT1=0.0°C always, stuck_count1=1000
-    → 🔴 SENSOR FAULT (impossible to read same value 1000+ times)
+    → SENSOR FAULT (impossible to read same value 1000+ times)
 
 ================================================================================
                     FEATURE IMPORTANCE FOR DETECTION
@@ -240,7 +240,7 @@ SOURCE CODE (in src/ folder):
                        NEXT STEPS FOR TRAINING
 ================================================================================
 
-✅ Dataset Prepared ← YOU ARE HERE
+ Dataset Prepared ← YOU ARE HERE
 
 📌 OPTION A: Edge Impulse Training (RECOMMENDED for embedded)
    1. Go to https://edgeimpulse.com/
