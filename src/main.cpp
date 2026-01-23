@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <time.h>
-#include <ctime>
 #define BLYNK_TEMPLATE_ID "TMPL6Aq_bFCm0"
 #define BLYNK_TEMPLATE_NAME "smart cold room monitoring by stephen chuang"
 #define BLYNK_PRINT Serial
@@ -26,8 +25,6 @@ const char *AUTH_TOKEN_ROOM3 = "kLDL8E1tXpYkuY70s2UYL1cxnvEXxYKw";
 
 constexpr uint8_t PIN_DHT1 = 4;
 constexpr uint8_t PIN_DHT2 = 5;
-constexpr uint8_t PIN_DHT_ROOM2 = 18; // placeholder for Room 2
-constexpr uint8_t PIN_DHT_ROOM3 = 19; // placeholder for Room 3
 
 // Virtual pins (adjust in Blynk dashboard later)
 constexpr uint8_t VP_ROOM1_TEMP = V0;
@@ -321,6 +318,7 @@ void setup() {
 	dht1.begin();
 	dht2.begin();
 	pinMode(psdht, OUTPUT);
+	digitalWrite(psdht, HIGH); // power DHT
 	WiFi.begin(WIFI_SSID, WIFI_PASS);
 	Serial.print("Connecting WiFi");
 	while (WiFi.status() != WL_CONNECTED) {
@@ -354,7 +352,6 @@ void setup() {
 }
 
 void loop() {
-	digitalWrite(psdht, HIGH); //power to dht22
 	Blynk.run();
 	timer.run();
 }
