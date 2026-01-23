@@ -289,7 +289,7 @@ String getHTMLPage() {
       fetch('/csv')
         .then(r => r.text())
         .then(csv => {
-          const lines = csv.trim().split('\n').slice(1); // skip header
+          const lines = csv.trim().split('\n').slice(1);
           const tbody = document.getElementById('dataTable');
           
           if (lines.length === 0 || lines[0].trim() === '') {
@@ -314,7 +314,7 @@ String getHTMLPage() {
             `;
           });
 
-          tbody.innerHTML = rows.reverse().join(''); // newest first
+          tbody.innerHTML = rows.reverse().join('');
           document.getElementById('recordCount').innerText = lines.length;
           
           if (lines.length > 0) {
@@ -349,9 +349,7 @@ String getHTMLPage() {
       }
     }
 
-    // Load data on page load
     loadData();
-    // Auto-refresh every 3 seconds
     setInterval(loadData, 3000);
   </script>
 </body>
@@ -388,7 +386,7 @@ void readSensor() {
 
   float t1 = dht1.readTemperature();
   if (!isnan(t1)) {
-    t1 += 0.3; // DHT11 offset adjustment to align with DHT22
+    t1 += 0.3; // setelah di baca data nya DHT 11 selalu lebih kecil 0.3 derajat Celsius
   }
   float h1 = dht1.readHumidity();
   float t2 = dht2.readTemperature();
