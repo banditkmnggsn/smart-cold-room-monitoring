@@ -2,21 +2,26 @@
 #include <WiFi.h>
 #define BLYNK_TEMPLATE_ID "TMPL6Aq_bFCm0"
 #define BLYNK_TEMPLATE_NAME "smart cold room monitoring by stephen chuang"
-#define BLYNK_AUTH_TOKEN "i_MZ8vL4A-bgPaDwRl1MAS5CN2elvPqp"
 #define BLYNK_PRINT Serial
 #include <BlynkSimpleEsp32.h>
 #include <DHT.h>
 #include <deque>
 
+#ifdef EI_PORTING_ARDUINO
+#undef EI_PORTING_ARDUINO
+#endif
 #include "edge-impulse-sdk/dsp/numpy.hpp"
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
 #include "model-parameters/model_metadata.h"
 
-// WiFi credentials (fill later)
 const char *WIFI_SSID = "M6";
 const char *WIFI_PASS = "STep1234";
 
-// Pins and sensor types
+// Auth tokens for each room
+const char *AUTH_TOKEN_ROOM1 = "qHDBumZ5WhCTTSdFd7AYHJh6jM9e1JZF";
+const char *AUTH_TOKEN_ROOM2 = "VQslhXXlQDUmaQrKr_xikqRU-FqyPPfj";
+const char *AUTH_TOKEN_ROOM3 = "kLDL8E1tXpYkuY70s2UYL1cxnvEXxYKw";
+
 constexpr uint8_t PIN_DHT1 = 4;   // DHT22 for Room 1
 constexpr uint8_t PIN_DHT2 = 5;   // DHT11 for Room 1 (second sensor)
 constexpr uint8_t PIN_DHT_ROOM2 = 18; // placeholder for Room 2
@@ -26,25 +31,34 @@ constexpr uint8_t PIN_DHT_ROOM3 = 19; // placeholder for Room 3
 constexpr uint8_t VP_ROOM1_TEMP = V0;
 constexpr uint8_t VP_ROOM1_HUM = V1;
 constexpr uint8_t VP_ROOM1_STATUS = V2;
-constexpr uint8_t VP_ROOM1_TEMP_CHART = V3;
-constexpr uint8_t VP_ROOM1_HUM_CHART = V4;
 
-constexpr uint8_t VP_ROOM2_TEMP = V5;
-constexpr uint8_t VP_ROOM2_HUM = V6;
-constexpr uint8_t VP_ROOM2_STATUS = V7;
+constexpr uint8_t VP_ROOM2_TEMP = V3;
+constexpr uint8_t VP_ROOM2_HUM = V4;
+constexpr uint8_t VP_ROOM2_STATUS = V5;
 
-constexpr uint8_t VP_ROOM3_TEMP = V8;
-constexpr uint8_t VP_ROOM3_HUM = V9;
-constexpr uint8_t VP_ROOM3_STATUS = V10;
+constexpr uint8_t VP_ROOM3_TEMP = V6;
+constexpr uint8_t VP_ROOM3_HUM = V7;
+constexpr uint8_t VP_ROOM3_STATUS = V8;
+
+// Virtual pins for diff_t (temperature difference)
+constexpr uint8_t VP_ROOM1_DIFF_T = V9;
+constexpr uint8_t VP_ROOM2_DIFF_T = V10;
+constexpr uint8_t VP_ROOM3_DIFF_T = V11;
+
+// Virtual pin for LED status (0=Normal, 1=Error)
+constexpr uint8_t VP_LED_STATUS = V12;
+
+// Pilih ruangan aktif (1, 2, atau 3). Satu device mengirim ke satu ruangan.
+int activeRoom = 1;
+
+const int psdht = 26;
 
 DHT dht1(PIN_DHT1, DHT22);
 DHT dht2(PIN_DHT2, DHT11);
-
-// Sampling and model constants
-constexpr size_t FEATURE_SIZE = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; // 24 * 15
-constexpr size_t SAMPLE_COUNT = EI_CLASSIFIER_RAW_SAMPLE_COUNT;     // 24
-constexpr size_t FEATURES_PER_SAMPLE = EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME; // 15
-constexpr uint32_t SAMPLE_INTERVAL_MS = EI_CLASSIFIER_INTERVAL_MS;  // 5000 ms
+constexpr size_t FEATURE_SIZE = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
+constexpr size_t SAMPLE_COUNT = EI_CLASSIFIER_RAW_SAMPLE_COUNT;
+constexpr size_t FEATURES_PER_SAMPLE = EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME;
+constexpr uint32_t SAMPLE_INTERVAL_MS = EI_CLASSIFIER_INTERVAL_MS;
 
 float feature_buffer[FEATURE_SIZE] = {0};
 size_t sample_index = 0;
@@ -172,10 +186,27 @@ static const char *className(int cls) {
 	}
 }
 
-static void publishRoom(uint8_t vpTemp, uint8_t vpHum, uint8_t vpStatus, float temp, float hum, const char *status) {
-	Blynk.virtualWrite(vpTemp, temp);
-	Blynk.virtualWrite(vpHum, hum);
-	Blynk.virtualWrite(vpStatus, status);
+struct RoomPins {
+	uint8_t vpTemp;
+	uint8_t vpHum;
+	uint8_t vpStatus;
+	uint8_t vpDiffT;
+};
+
+static RoomPins selectRoomPins(int room) {
+	switch (room) {
+		case 2: return {VP_ROOM2_TEMP, VP_ROOM2_HUM, VP_ROOM2_STATUS, VP_ROOM2_DIFF_T};
+		case 3: return {VP_ROOM3_TEMP, VP_ROOM3_HUM, VP_ROOM3_STATUS, VP_ROOM3_DIFF_T};
+		default: return {VP_ROOM1_TEMP, VP_ROOM1_HUM, VP_ROOM1_STATUS, VP_ROOM1_DIFF_T};
+	}
+}
+
+static const char* selectAuthToken(int room) {
+	switch (room) {
+		case 2: return AUTH_TOKEN_ROOM2;
+		case 3: return AUTH_TOKEN_ROOM3;
+		default: return AUTH_TOKEN_ROOM1;
+	}
 }
 
 static void runInference() {
@@ -211,18 +242,22 @@ static void runInference() {
 	Serial.print(" Final class: ");
 	Serial.println(finalClass);
 
-	// Publish Room 1 data; Rooms 2/3 stay empty for demo
+	// Publish data to the selected room only
 	float t1 = feature_buffer[(SAMPLE_COUNT - 1) * FEATURES_PER_SAMPLE];
 	float h1 = feature_buffer[(SAMPLE_COUNT - 1) * FEATURES_PER_SAMPLE + 1];
 	float t2 = feature_buffer[(SAMPLE_COUNT - 1) * FEATURES_PER_SAMPLE + 2];
 	float h2 = feature_buffer[(SAMPLE_COUNT - 1) * FEATURES_PER_SAMPLE + 3];
+	float diffT = t1 - t2; // Temperature difference
 
-	Blynk.virtualWrite(VP_ROOM1_TEMP_CHART, t1);
-	Blynk.virtualWrite(VP_ROOM1_HUM_CHART, h1);
-	publishRoom(VP_ROOM1_TEMP, VP_ROOM1_HUM, VP_ROOM1_STATUS, t1, h1, className(finalClass));
-
-	publishRoom(VP_ROOM2_TEMP, VP_ROOM2_HUM, VP_ROOM2_STATUS, 0, 0, "No data");
-	publishRoom(VP_ROOM3_TEMP, VP_ROOM3_HUM, VP_ROOM3_STATUS, 0, 0, "No data");
+	RoomPins pins = selectRoomPins(activeRoom);
+	Blynk.virtualWrite(pins.vpTemp, t1);
+	Blynk.virtualWrite(pins.vpHum, h1);
+	Blynk.virtualWrite(pins.vpStatus, className(finalClass));
+	Blynk.virtualWrite(pins.vpDiffT, diffT);
+	
+	// LED status: 1 if error (finalClass != 0), 0 if normal
+	int ledStatus = (finalClass != 0) ? 1 : 0;
+	Blynk.virtualWrite(VP_LED_STATUS, ledStatus);
 }
 
 static void sampleTask() {
@@ -268,7 +303,7 @@ void setup() {
 	delay(200);
 	dht1.begin();
 	dht2.begin();
-
+	pinMode(psdht, OUTPUT);
 	WiFi.begin(WIFI_SSID, WIFI_PASS);
 	Serial.print("Connecting WiFi");
 	while (WiFi.status() != WL_CONNECTED) {
@@ -277,12 +312,19 @@ void setup() {
 	}
 	Serial.println(" connected");
 
-	Blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
+	const char* authToken = selectAuthToken(activeRoom);
+	Serial.print("Active Room: ");
+	Serial.println(activeRoom);
+	Serial.print("Auth Token: ");
+	Serial.println(authToken);
+	
+	Blynk.begin(authToken, WIFI_SSID, WIFI_PASS);
 
 	timer.setInterval(SAMPLE_INTERVAL_MS, sampleTask);
 }
 
 void loop() {
+	digitalWrite(psdht, HIGH); //power to dht22
 	Blynk.run();
 	timer.run();
 }
