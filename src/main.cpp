@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <time.h>
+#include <ctime>
 #define BLYNK_TEMPLATE_ID "TMPL6Aq_bFCm0"
 #define BLYNK_TEMPLATE_NAME "smart cold room monitoring by stephen chuang"
 #define BLYNK_PRINT Serial
@@ -22,8 +24,8 @@ const char *AUTH_TOKEN_ROOM1 = "qHDBumZ5WhCTTSdFd7AYHJh6jM9e1JZF";
 const char *AUTH_TOKEN_ROOM2 = "VQslhXXlQDUmaQrKr_xikqRU-FqyPPfj";
 const char *AUTH_TOKEN_ROOM3 = "kLDL8E1tXpYkuY70s2UYL1cxnvEXxYKw";
 
-constexpr uint8_t PIN_DHT1 = 4;   // DHT22 for Room 1
-constexpr uint8_t PIN_DHT2 = 5;   // DHT11 for Room 1 (second sensor)
+constexpr uint8_t PIN_DHT1 = 4;
+constexpr uint8_t PIN_DHT2 = 5;
 constexpr uint8_t PIN_DHT_ROOM2 = 18; // placeholder for Room 2
 constexpr uint8_t PIN_DHT_ROOM3 = 19; // placeholder for Room 3
 
@@ -47,6 +49,9 @@ constexpr uint8_t VP_ROOM3_DIFF_T = V11;
 
 // Virtual pin for LED status (0=Normal, 1=Error)
 constexpr uint8_t VP_LED_STATUS = V12;
+
+// Virtual pin for last update timestamp
+constexpr uint8_t VP_LAST_UPDATE = V13;
 
 // Pilih ruangan aktif (1, 2, atau 3). Satu device mengirim ke satu ruangan.
 int activeRoom = 1;
@@ -209,6 +214,15 @@ static const char* selectAuthToken(int room) {
 	}
 }
 
+static String getFormattedTimestamp() {
+	time_t now = time(nullptr);
+	struct tm* timeinfo = localtime(&now);
+	
+	char buffer[30];
+	strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+	return String(buffer);
+}
+
 static void runInference() {
 	ei::signal_t signal;
 	ei_impulse_result_t result = {0};
@@ -258,6 +272,9 @@ static void runInference() {
 	// LED status: 1 if error (finalClass != 0), 0 if normal
 	int ledStatus = (finalClass != 0) ? 1 : 0;
 	Blynk.virtualWrite(VP_LED_STATUS, ledStatus);
+	
+	// Send last update timestamp
+	Blynk.virtualWrite(VP_LAST_UPDATE, getFormattedTimestamp());
 }
 
 static void sampleTask() {
@@ -311,6 +328,19 @@ void setup() {
 		Serial.print(".");
 	}
 	Serial.println(" connected");
+
+	// Configure time with NTP
+	configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // GMT+7 for Indonesia
+	Serial.print("Waiting for NTP time sync: ");
+	time_t now = time(nullptr);
+	int maxWait = 20;
+	while (now < 24 * 3600 && maxWait-- > 0) {
+		Serial.print(".");
+		delay(500);
+		now = time(nullptr);
+	}
+	Serial.println();
+	Serial.println(ctime(&now));
 
 	const char* authToken = selectAuthToken(activeRoom);
 	Serial.print("Active Room: ");
